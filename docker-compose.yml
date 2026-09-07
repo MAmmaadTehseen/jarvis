@@ -1,0 +1,23 @@
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    container_name: jarvis-dynamodb
+    working_dir: /home/dynamodblocal
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    ports:
+      - "8001:8000"   # 8000 on this machine is taken by labs-chromadb
+    volumes:
+      - ./.dynamodb:/home/dynamodblocal/data
+
+  # Optional: run the bot itself in a container. `docker compose --profile full up --build`
+  bot:
+    build: .
+    container_name: jarvis-bot
+    profiles: ["full"]
+    env_file: .env
+    environment:
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - dynamodb

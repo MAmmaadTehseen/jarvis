@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.env
+.dynamodb/
+*.log
+.DS_Store
