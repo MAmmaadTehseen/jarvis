@@ -114,9 +114,14 @@ resource "aws_lambda_function" "jarvis" {
       TABLE_NAME     = aws_dynamodb_table.jarvis.name
       TZ_NAME        = var.tz_name
       START_DATE     = var.start_date
-      RUN_MODE       = "webhook"
-      LOCAL_CRON     = "false"
       LOG_LEVEL      = "info"
+
+      # RUN_MODE and LOCAL_CRON are deliberately absent. They configure the
+      # long-running local server in src/index.ts; the Lambda handler reads
+      # neither, and RUN_MODE=webhook would fail config validation here because
+      # there is no WEBHOOK_URL to give it (the function URL is created after
+      # the function, so it cannot be one of the function's own env vars).
+      # AWS_REGION is set by the Lambda runtime itself.
     }
   }
 

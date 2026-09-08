@@ -22,8 +22,20 @@ const schema = z.object({
   AWS_REGION: z.string().default("us-east-1"),
   DYNAMODB_ENDPOINT: z.string().trim().optional().transform((v) => (v ? v : undefined)),
   LOG_LEVEL: z.string().default("info"),
-});
+})
+  // Cross-field rules belong here rather than in load(), so a test can check an
+  // environment without having to run the process that would exit on a bad one.
+  .superRefine((v, ctx) => {
+    if (v.RUN_MODE === "webhook" && !v.WEBHOOK_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["WEBHOOK_URL"],
+        message: "RUN_MODE=webhook requires WEBHOOK_URL (e.g. https://jarvis.ammaad.online)",
+      });
+    }
+  });
 
+export const configSchema = schema;
 export type Config = z.infer<typeof schema>;
 
 function load(): Config {
@@ -31,10 +43,6 @@ function load(): Config {
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`);
     console.error(`Invalid configuration:\n${lines.join("\n")}\n\nCopy .env.example to .env and fill it in.`);
-    process.exit(1);
-  }
-  if (parsed.data.RUN_MODE === "webhook" && !parsed.data.WEBHOOK_URL) {
-    console.error("RUN_MODE=webhook requires WEBHOOK_URL (e.g. https://jarvis.ammaad.online)");
     process.exit(1);
   }
   return parsed.data;
