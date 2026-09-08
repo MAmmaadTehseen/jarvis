@@ -21,7 +21,7 @@ export function createServer(bot: Bot): FastifyInstance {
   });
 
   if (config.RUN_MODE === "webhook") {
-    app.post("/webhook", webhookCallback(bot, "fastify"));
+    app.post("/webhook", webhookCallback(bot, "fastify", { secretToken: config.WEBHOOK_SECRET }));
   }
 
   app.setErrorHandler((err, _req, reply) => {

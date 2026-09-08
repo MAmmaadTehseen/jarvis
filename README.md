@@ -19,7 +19,7 @@ The journey is in [`journal/`](journal/), one file per week.
 
 ## Status
 
-Week 0. Runs locally against DynamoDB Local. Next: a new AWS account and a Dockerfile that CI builds.
+Live on AWS Lambda, running at $0/month on the always-free tier. Local development still runs against DynamoDB Local.
 
 ## Run it
 
@@ -64,21 +64,62 @@ Scheduled: 09:00 morning nudge, 21:00 evening check, Sunday 19:00 review. Locall
 - **Pure domain logic** in `src/domain/` (rotation, scoring, streaks, formatting) with unit tests; I/O lives in `src/db`, `src/bot.ts`, `src/jobs.ts`.
 - `RUN_MODE=polling` for dev, `RUN_MODE=webhook` in production behind `https://jarvis.ammaad.online`.
 
-### Production URL: jarvis.ammaad.online
+## Deploy
 
-`ammaad.online` is on Namecheap DNS. Two options, in order of preference:
+Everything below is on the AWS always-free tier: Lambda (1M requests/month), DynamoDB
+on-demand (25 GB), EventBridge Scheduler (14M invocations/month), CloudWatch Logs
+(5 GB/month). None of it expires after the 6-month new-account window, so the running
+cost is $0 rather than "free until the credits run out".
 
-1. **Move DNS to Cloudflare (free).** Then locally, `cloudflared tunnel` can expose the dev bot at `jarvis.ammaad.online` for webhook testing, and in production a proxied DNS record in front of the Fargate service (later the Lambda function URL) gives free TLS. This is the Week 1 DevOps task.
-2. Keep Namecheap DNS and add a CNAME `jarvis` → the ALB / function URL once it exists. No local tunnel with a custom hostname on this path.
+There is no server, no load balancer and no NAT gateway, which is where a bill like
+this usually comes from. Telegram posts updates straight to a Lambda function URL,
+and EventBridge Scheduler invokes the same function for the three daily jobs.
+
+```
+Telegram  --POST-->  Lambda function URL  --                                             >-- jarvis (Node 22, arm64) --> DynamoDB
+EventBridge Scheduler  --{"job":"morning"}--/
+```
+
+One function serves both: [`src/lambda.ts`](src/lambda.ts) treats an event with a
+`job` field as a scheduled run and anything else as an HTTP request.
+
+```bash
+cp infra/terraform.tfvars.example infra/terraform.tfvars   # bot token + chat id
+npm run build:lambda
+terraform -chdir=infra init
+terraform -chdir=infra apply
+npm run set-webhook          # points Telegram at the function URL
+```
+
+`terraform -chdir=infra destroy` removes every resource.
+
+### Security notes
+
+- The function URL is `AuthType: NONE`, because Telegram can't sign requests with
+  SigV4. Terraform generates a 48-character secret that Telegram echoes back in
+  `X-Telegram-Bot-Api-Secret-Token` on every update; grammy rejects anything without
+  it, so the public URL isn't an open door.
+- The Lambda role can call five DynamoDB actions on one table ARN. Nothing else.
+- Terraform state holds the bot token and the webhook secret in plain text.
+  `infra/.gitignore` keeps state, tfvars and plan files out of git. Moving state to
+  an encrypted S3 backend, and the token to SSM Parameter Store, is week 3-4 work.
+
+### jarvis.ammaad.online
+
+Not wired up yet, and not needed: the function URL is already HTTPS with a valid
+certificate. A custom domain means an API Gateway HTTP API (or CloudFront) in front
+of the function plus an ACM certificate, which is cosmetic for a bot no one types a
+URL into. It's a nice week 5 exercise, not a prerequisite.
 
 ## Roadmap
 
 | Weeks | AWS | DevOps | Jarvis |
 | --- | --- | --- | --- |
-| 1–2 | New account, MFA, budget alarm, 5 onboarding tasks | Dockerfile, CI | All commands, local nudges, text posts |
-| 3–4 | ECR, ECS Fargate, DynamoDB, EventBridge Scheduler, IAM task role | Terraform + remote state, deploy via GitHub Actions OIDC | Webhook mode, scorecard PNG |
-| 5–6 | CloudWatch alarms → SNS → Telegram | dev/prod environments | Claude Haiku post drafts, hard-capped |
-| 7–8 | Migrate to Lambda, tear down Fargate: $0/month | Terraform modules, destroy proven | Architecture write-up |
+| 0 | Account, MFA, budget alarm | Terraform, Lambda, DynamoDB, EventBridge, IAM | Live on AWS at $0/month |
+| 1–2 | CloudWatch Log Insights, cost explorer | GitHub Actions deploy via OIDC | Scorecard PNG, `/review` writes the journal |
+| 3–4 | S3 remote state, SSM Parameter Store for the token | dev/prod workspaces, plan-on-PR | Claude Haiku post drafts, hard-capped |
+| 5–6 | CloudWatch alarms → SNS → Telegram (Jarvis reports on itself) | Custom domain, API Gateway | Streak logic, spend counter |
+| 7–8 | Optional: the same bot on ECS Fargate, to compare | Terraform modules, destroy proven | Architecture write-up |
 
 ## License
 

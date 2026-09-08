@@ -1,0 +1,11 @@
+# State holds the bot token and webhook secret in plain text.
+*.tfstate
+*.tfstate.*
+.terraform/
+.build/
+
+# Holds the bot token.
+terraform.tfvars
+
+# Plan files can contain variable values.
+*.tfplan

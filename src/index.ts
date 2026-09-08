@@ -35,7 +35,10 @@ async function main(): Promise<void> {
   }
 
   if (config.RUN_MODE === "webhook") {
-    await bot.api.setWebhook(`${config.WEBHOOK_URL}/webhook`, { drop_pending_updates: false });
+    await bot.api.setWebhook(`${config.WEBHOOK_URL}/webhook`, {
+      drop_pending_updates: false,
+      secret_token: config.WEBHOOK_SECRET,
+    });
     log.info({ url: `${config.WEBHOOK_URL}/webhook` }, "webhook registered");
   } else {
     await bot.api.deleteWebhook();

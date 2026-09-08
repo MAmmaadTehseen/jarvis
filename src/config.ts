@@ -11,6 +11,9 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   WEBHOOK_URL: z.string().trim().optional().transform((v) => (v ? v.replace(/\/$/, "") : undefined)),
   CRON_SECRET: z.string().default("change-me"),
+  // Telegram sends this back in X-Telegram-Bot-Api-Secret-Token, proving an
+  // update really came from Telegram. Required in AWS: the Function URL is public.
+  WEBHOOK_SECRET: z.string().trim().optional().transform((v) => (v ? v : undefined)),
   LOCAL_CRON: z.enum(["true", "false"]).default("true"),
   MORNING_CRON: z.string().default("0 9 * * *"),
   EVENING_CRON: z.string().default("0 21 * * *"),
