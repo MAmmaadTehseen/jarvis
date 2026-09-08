@@ -147,12 +147,21 @@ resource "aws_lambda_permission" "function_url" {
 
 # ---------------------------------------------------------------- schedules
 
+data "aws_caller_identity" "current" {}
+
 data "aws_iam_policy_document" "scheduler_assume" {
   statement {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "Service"
       identifiers = ["scheduler.amazonaws.com"]
+    }
+
+    # Confused-deputy guard: only schedules in this account may assume the role.
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
     }
   }
 }
@@ -197,4 +206,9 @@ resource "aws_scheduler_schedule" "job" {
       maximum_retry_attempts = 2
     }
   }
+
+  # Scheduler validates the role when the schedule is created. Without this the
+  # first apply can race IAM propagation and fail on "the execution role you
+  # provide must allow AWS EventBridge Scheduler to assume the role".
+  depends_on = [aws_iam_role_policy.scheduler_invoke]
 }
