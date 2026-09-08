@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "build:lambda": "node scripts/build-lambda.mjs",
     "deploy": "npm run build:lambda && terraform -chdir=infra apply",
-    "register": "tsx scripts/register-commands.ts"
+    "register": "tsx scripts/register-commands.ts",
+    "tfvars": "tsx scripts/make-tfvars.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",

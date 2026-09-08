@@ -48,7 +48,7 @@ function load(): Config {
   const parsed = schema.safeParse(process.env);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`);
-    console.error(`Invalid configuration:\n${lines.join("\n")}\n\nCopy .env.example to .env and fill it in.`);
+    console.error(`Invalid configuration:\n${lines.join("\n")}\n\nFill these in in .env (start from .env.example), or set them in the environment.`);
     process.exit(1);
   }
   return parsed.data;
