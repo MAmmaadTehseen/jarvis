@@ -1,22 +1,33 @@
-# Week 0 (2026-09-07 to 2026-09-13): setup
+# Week 0 (2026-09-07 to 2026-09-13): setup, and live on AWS
 
 ## Why
 
 I have five things I want to do in parallel: learn AWS properly, learn DevOps properly, freelance, build practice projects, and build real ones. I have 5 to 8 hours a week. I derail because nothing forces a choice each day and nothing notices when I skip.
 
-So I'm building the thing that notices. Jarvis is a Telegram bot that tells me what today's slot is, asks me in the evening whether I did it, and turns my logs into a weekly scorecard I post publicly. It runs on AWS, deploys itself, and every piece of infrastructure I add to it is something I learn.
+So I'm building the thing that notices. Jarvis is a Telegram bot that tells me what today's slot is, asks me in the evening whether I did it, and turns my logs into a weekly scorecard I post publicly.
+
+The plan was to run it locally for two weeks and deploy in week 3. That was wrong: a bot that only answers while my PC is on can't hold anyone accountable. So week 0 ends with it live.
 
 ## Shipped
 
-- Scaffolded the bot: Node + TypeScript, grammy, Fastify, DynamoDB single-table, node-cron for local nudges
-- Commands: /today /log /learned /done /skip /week /add /score /review /post /park /parked /goals
-- Docker Compose with DynamoDB Local, multi-stage Dockerfile, GitHub Actions CI
-- Public repo
+- The bot: Node 22 + TypeScript, grammy, DynamoDB single table. Commands: /today /log /learned /done /skip /week /add /score /review /post /park /parked /goals
+- Live on AWS Lambda, provisioned with Terraform: DynamoDB table, function URL, EventBridge Scheduler for the three daily jobs, IAM scoped to five actions on one table
+- $0/month. Lambda, DynamoDB, EventBridge and CloudWatch all sit inside the always-free tier, not the 6-month signup credits
+- CI on every push: typecheck, tests against DynamoDB Local, build, Docker build
 
-## Slipped
+## What I got wrong
 
-_fill in on Sunday_
+Two bugs I caused by moving to Lambda, both of which look fine in review:
+
+1. The Sunday review collected its three answers in an in-memory `Map`. Fine for a long-running process; on Lambda each reply can land in a different container, so the answers disappear between questions. Moved to DynamoDB.
+2. Terraform set `RUN_MODE=webhook` on the function, but config validation rejects that without a `WEBHOOK_URL` — and the function URL doesn't exist until after the function, so it can't be one of the function's own env vars. Every cold start would have called `process.exit(1)`. The fix was deleting two lines; finding it was the work.
+
+The second one is why there's now a test that parses the environment block out of `main.tf` and checks it against the config schema. Infrastructure and code drift apart quietly.
 
 ## Lesson
 
-_fill in on Sunday_
+"Deploy it later" is how a tool for beating procrastination becomes a thing I procrastinate about. Getting it live on day one cost about two extra hours and removed the only excuse that mattered.
+
+## Next
+
+Week 1: scorecard as an image, GitHub Actions deploying on push via OIDC, the five AWS onboarding tasks for the $200 in credits, Upwork profile live. Daily posts start week 2.
