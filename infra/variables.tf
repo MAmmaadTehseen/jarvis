@@ -10,14 +10,29 @@ variable "project_name" {
   default     = "jarvis"
 }
 
-variable "bot_token" {
-  description = "Telegram bot token from @BotFather."
+variable "discord_app_id" {
+  description = "Discord application id (Developer Portal > General Information)."
+  type        = string
+}
+
+variable "discord_public_key" {
+  description = "Discord public key, 64 hex characters. Used to verify interaction signatures."
+  type        = string
+}
+
+variable "discord_bot_token" {
+  description = "Discord bot token (Developer Portal > Bot > Reset Token)."
   type        = string
   sensitive   = true
 }
 
-variable "owner_chat_id" {
-  description = "Your Telegram chat id. The bot ignores everyone else and sends nudges here."
+variable "discord_channel_id" {
+  description = "Channel the scheduled nudges are posted to."
+  type        = string
+}
+
+variable "owner_user_id" {
+  description = "Your Discord user id. Everyone else's commands are ignored."
   type        = string
 }
 

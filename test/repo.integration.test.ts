@@ -4,7 +4,11 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-process.env.BOT_TOKEN ??= "test-token";
+// Assigned, not defaulted, so a stale .env cannot change what is under test.
+process.env.DISCORD_APP_ID = "1";
+process.env.DISCORD_PUBLIC_KEY = "ab".repeat(32);
+process.env.DISCORD_BOT_TOKEN = "t";
+process.env.LOCAL_CRON = "false";
 process.env.TABLE_NAME = "jarvis_test";
 process.env.DYNAMODB_ENDPOINT ??= "http://localhost:8001";
 
@@ -71,20 +75,6 @@ describe.skipIf(!up)("repo against DynamoDB Local", () => {
     // idempotent
     const again = await svc.recomputeStreaks(week);
     expect(again.find((s) => s.goalId === "aws")?.count).toBe(1);
-  });
-
-  it("round-trips an in-progress review, which Lambda cannot keep in memory", async () => {
-    const chatId = 4242;
-    expect(await repo.getPendingReview(chatId)).toBeUndefined();
-
-    await repo.putPendingReview({ chatId, week: 99, answers: [] });
-    await repo.putPendingReview({ chatId, week: 99, answers: ["shipped a thing"] });
-
-    const pending = await repo.getPendingReview(chatId);
-    expect(pending).toEqual({ chatId, week: 99, answers: ["shipped a thing"] });
-
-    await repo.clearPendingReview(chatId);
-    expect(await repo.getPendingReview(chatId)).toBeUndefined();
   });
 
   it("parks ideas", async () => {

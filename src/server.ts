@@ -1,28 +1,47 @@
 import Fastify, { type FastifyInstance } from "fastify";
-import { webhookCallback, type Bot } from "grammy";
 import { config } from "./config.js";
+import { handleInteraction } from "./discord/interactions.js";
+import { isValidSignature } from "./discord/verify.js";
+import type { Interaction } from "./discord/types.js";
 import { isJob, runJob } from "./jobs.js";
 import { log } from "./logger.js";
 
-export function createServer(bot: Bot): FastifyInstance {
+export function createServer(): FastifyInstance {
   const app = Fastify({ logger: false });
 
-  app.get("/healthz", async () => ({ ok: true, mode: config.RUN_MODE, ts: new Date().toISOString() }));
-
-  // EventBridge Scheduler (or curl) triggers jobs here.
-  app.post<{ Params: { job: string } }>("/cron/:job", async (req, reply) => {
-    if (req.headers["x-cron-secret"] !== config.CRON_SECRET) {
-      return reply.code(401).send({ error: "unauthorized" });
-    }
-    const { job } = req.params;
-    if (!isJob(job)) return reply.code(404).send({ error: `unknown job ${job}` });
-    await runJob(job, bot);
-    return { ok: true, job };
+  // The signature covers the exact bytes Discord sent, so keep the raw body.
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    done(null, { raw: body as string });
   });
 
-  if (config.RUN_MODE === "webhook") {
-    app.post("/webhook", webhookCallback(bot, "fastify", { secretToken: config.WEBHOOK_SECRET }));
-  }
+  app.get("/healthz", async () => ({ ok: true, ts: new Date().toISOString() }));
+
+  app.post("/interactions", async (req, reply) => {
+    const rawBody = (req.body as { raw?: string })?.raw ?? "";
+    const ok = isValidSignature({
+      publicKeyHex: config.DISCORD_PUBLIC_KEY,
+      signature: req.headers["x-signature-ed25519"] as string | undefined,
+      timestamp: req.headers["x-signature-timestamp"] as string | undefined,
+      rawBody,
+    });
+    if (!ok) return reply.code(401).send("invalid request signature");
+
+    let interaction: Interaction;
+    try {
+      interaction = JSON.parse(rawBody);
+    } catch {
+      return reply.code(400).send({ error: "bad json" });
+    }
+    return reply.send(await handleInteraction(interaction));
+  });
+
+  // Lets you fire a nudge on demand instead of waiting for 09:00.
+  app.post<{ Params: { job: string } }>("/cron/:job", async (req, reply) => {
+    const { job } = req.params;
+    if (!isJob(job)) return reply.code(404).send({ error: `unknown job ${job}` });
+    await runJob(job);
+    return { ok: true, job };
+  });
 
   app.setErrorHandler((err, _req, reply) => {
     log.error({ err }, "request failed");

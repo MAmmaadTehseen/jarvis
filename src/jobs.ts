@@ -1,17 +1,18 @@
 /**
- * Scheduled jobs. Locally node-cron calls these directly; on AWS, EventBridge
- * Scheduler POSTs to /cron/<job> and the server calls them.
+ * Scheduled jobs. On AWS, EventBridge Scheduler invokes the Lambda with
+ * {"job":"morning"}; locally node-cron calls the same functions.
+ *
+ * These have no interaction to reply to, so they post to the channel directly.
  */
-import type { Bot } from "grammy";
 import { config } from "./config.js";
 import * as repo from "./db/repo.js";
-import * as svc from "./service.js";
+import { sendMessage } from "./discord/api.js";
 import * as fmt from "./domain/format.js";
 import { slotFor } from "./domain/rotation.js";
 import { consecutiveMissedDays } from "./domain/score.js";
 import { addDays } from "./domain/time.js";
 import { log } from "./logger.js";
-import { startReview } from "./bot.js";
+import * as svc from "./service.js";
 
 export const JOBS = ["morning", "evening", "sunday"] as const;
 export type JobName = (typeof JOBS)[number];
@@ -19,12 +20,13 @@ export function isJob(s: string): s is JobName {
   return (JOBS as readonly string[]).includes(s);
 }
 
-async function send(bot: Bot, text: string, html = false): Promise<void> {
-  if (!config.OWNER_CHAT_ID) {
-    log.warn("OWNER_CHAT_ID not set; skipping scheduled message");
+async function post(text: string): Promise<void> {
+  if (!config.DISCORD_CHANNEL_ID) {
+    log.warn("DISCORD_CHANNEL_ID not set; dropping scheduled message");
     return;
   }
-  await bot.api.sendMessage(config.OWNER_CHAT_ID, text, html ? { parse_mode: "HTML" } : undefined);
+  const mention = config.OWNER_USER_ID ? `<@${config.OWNER_USER_ID}> ` : "";
+  await sendMessage(config.DISCORD_CHANNEL_ID, mention + text);
 }
 
 export async function todayText(): Promise<string> {
@@ -38,53 +40,54 @@ export async function todayText(): Promise<string> {
   return fmt.todayMessage({ day, week, dayN, slot, goal, task, loggedToday, learnedToday });
 }
 
-export async function morning(bot: Bot): Promise<void> {
-  await send(bot, `Good morning.\n\n${await todayText()}`);
+export async function morning(): Promise<void> {
+  await post(`Good morning.\n\n${await todayText()}`);
 }
 
-export async function evening(bot: Bot): Promise<void> {
+export async function evening(): Promise<void> {
   const { day, week } = svc.now();
   const slot = slotFor(day.weekday);
+
   if (slot.goalId === null) {
-    await send(bot, "Sunday evening. If you haven't run /review yet, now is the time.");
+    await post("Sunday evening. If you haven't run `/review` yet, now is the time.");
     return;
   }
+
   const data = await repo.getWeek(week);
   const todayLogs = data.logs.filter((l) => l.date === day.date);
   const learned = data.learned.some((l) => l.date === day.date);
 
   if (todayLogs.length > 0) {
     const mins = todayLogs.reduce((a, l) => a + l.minutes, 0);
-    const tail = learned ? "Good. /post gives you today's draft." : "One more thing: /learned <one line>. It's tomorrow's post.";
-    await send(bot, `${fmt.fmtMinutes(mins)} logged today on ${slot.label}. ${tail}`);
+    const tail = learned ? "Good. `/post` gives you today's draft." : "One more thing: `/learned`. It's tomorrow's post.";
+    await post(`${fmt.fmtMinutes(mins)} logged today on ${slot.label}. ${tail}`);
     return;
   }
 
   const logged = await svc.loggedDates([week, Math.max(0, week - 1)]);
   const missedBefore = consecutiveMissedDays(logged, addDays(day.date, -1), config.START_DATE);
-  let text = `Nothing logged today (${slot.label}). Did you do it? Reply /log <minutes> <note>, or /skip <reason> so it's on record.`;
+  let text = `Nothing logged today (${slot.label}). Did you do it? Reply with \`/log\`, or \`/skip\` so the reason is on record.`;
   if (missedBefore >= 1) {
     text += `\n\nThat's ${missedBefore + 1} work days in a row with nothing logged. Your streaks are at risk, and Saturday's scorecard is public.`;
   }
-  await send(bot, text);
+  await post(text);
 }
 
-export async function sunday(bot: Bot): Promise<void> {
+export async function sunday(): Promise<void> {
   const { week } = svc.now();
   await svc.recomputeStreaks(week);
   const score = await svc.getScore(week);
-  await send(bot, `<pre>${fmt.escapeHtml(fmt.scoreMessage(score))}</pre>`, true);
-  if (config.OWNER_CHAT_ID) await startReview(bot, Number(config.OWNER_CHAT_ID), week);
+  await post(`Week ${week} is done.\n\`\`\`\n${fmt.scoreMessage(score)}\n\`\`\`\nRun \`/review\` — three questions, one form.`);
 }
 
-export async function runJob(name: JobName, bot: Bot): Promise<void> {
+export async function runJob(name: JobName): Promise<void> {
   log.info({ job: name }, "running job");
   switch (name) {
     case "morning":
-      return morning(bot);
+      return morning();
     case "evening":
-      return evening(bot);
+      return evening();
     case "sunday":
-      return sunday(bot);
+      return sunday();
   }
 }

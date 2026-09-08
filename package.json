@@ -16,14 +16,13 @@
     "test:watch": "vitest",
     "build:lambda": "node scripts/build-lambda.mjs",
     "deploy": "npm run build:lambda && terraform -chdir=infra apply",
-    "set-webhook": "tsx scripts/set-webhook.ts"
+    "register": "tsx scripts/register-commands.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0",
     "dotenv": "^16.4.5",
     "fastify": "^5.2.0",
-    "grammy": "^1.34.0",
     "node-cron": "^4.2.0",
     "pino": "^9.6.0",
     "zod": "^3.24.1"

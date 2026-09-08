@@ -9,13 +9,6 @@ locals {
   }
 }
 
-# Telegram echoes this back in X-Telegram-Bot-Api-Secret-Token on every update.
-# The function URL is public, so this is what proves an update came from Telegram.
-resource "random_password" "webhook_secret" {
-  length  = 48
-  special = false # Telegram allows A-Z a-z 0-9 _ - only
-}
-
 # ---------------------------------------------------------------- data store
 
 resource "aws_dynamodb_table" "jarvis" {
@@ -102,26 +95,25 @@ resource "aws_lambda_function" "jarvis" {
   filename         = data.archive_file.lambda.output_path
   source_code_hash = data.archive_file.lambda.output_base64sha256
 
-  timeout     = 30 # Telegram gives us a bit; sending several messages can take a few seconds
-  memory_size = 256
+  timeout     = 30  # generous for the scheduled jobs; interactions answer in well under 3s
+  memory_size = 512 # Discord drops any interaction not answered within 3s; more memory means more CPU on a cold start
 
   environment {
     variables = {
-      NODE_ENV       = "production"
-      BOT_TOKEN      = var.bot_token
-      OWNER_CHAT_ID  = var.owner_chat_id
-      WEBHOOK_SECRET = random_password.webhook_secret.result
-      TABLE_NAME     = aws_dynamodb_table.jarvis.name
-      TZ_NAME        = var.tz_name
-      START_DATE     = var.start_date
-      LOG_LEVEL      = "info"
+      NODE_ENV           = "production"
+      DISCORD_APP_ID     = var.discord_app_id
+      DISCORD_PUBLIC_KEY = var.discord_public_key
+      DISCORD_BOT_TOKEN  = var.discord_bot_token
+      DISCORD_CHANNEL_ID = var.discord_channel_id
+      OWNER_USER_ID      = var.owner_user_id
+      TABLE_NAME         = aws_dynamodb_table.jarvis.name
+      TZ_NAME            = var.tz_name
+      START_DATE         = var.start_date
+      LOG_LEVEL          = "info"
 
-      # RUN_MODE and LOCAL_CRON are deliberately absent. They configure the
-      # long-running local server in src/index.ts; the Lambda handler reads
-      # neither, and RUN_MODE=webhook would fail config validation here because
-      # there is no WEBHOOK_URL to give it (the function URL is created after
-      # the function, so it cannot be one of the function's own env vars).
-      # AWS_REGION is set by the Lambda runtime itself.
+      # LOCAL_CRON is deliberately absent: it configures the long-running local
+      # server in src/index.ts, and here EventBridge Scheduler invokes the
+      # function directly. AWS_REGION is set by the Lambda runtime itself.
     }
   }
 
@@ -133,7 +125,7 @@ resource "aws_lambda_function" "jarvis" {
 
 resource "aws_lambda_function_url" "jarvis" {
   function_name      = aws_lambda_function.jarvis.function_name
-  authorization_type = "NONE" # Telegram cannot sign requests with SigV4
+  authorization_type = "NONE" # Discord cannot sign requests with SigV4
 }
 
 # AuthType NONE still needs an explicit resource policy when created via the API.

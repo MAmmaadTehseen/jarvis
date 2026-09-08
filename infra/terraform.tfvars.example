@@ -1,7 +1,17 @@
 # Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored: it holds
 # your bot token.
-bot_token     = "8123456789:AA-paste-yours-here"
-owner_chat_id = "123456789"
+#
+# App id and public key: https://discord.com/developers/applications -> your app
+#   -> General Information
+# Bot token: same app -> Bot -> Reset Token
+# Channel and user ids: enable Settings > Advanced > Developer Mode in Discord,
+#   then right-click the channel (or yourself) and Copy ID.
+
+discord_app_id     = "1234567890123456789"
+discord_public_key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+discord_bot_token  = "paste-your-bot-token"
+discord_channel_id = "1234567890123456789"
+owner_user_id      = "1234567890123456789"
 
 # Optional overrides
 # aws_region = "ap-south-1"

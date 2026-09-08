@@ -1,12 +1,6 @@
-output "function_url" {
-  description = "Public HTTPS endpoint. This is what Telegram posts updates to."
+output "interactions_url" {
+  description = "Paste this into the Discord Developer Portal as the Interactions Endpoint URL."
   value       = aws_lambda_function_url.jarvis.function_url
-}
-
-output "webhook_secret" {
-  description = "Shared secret Telegram must send back. Used by npm run set-webhook."
-  value       = random_password.webhook_secret.result
-  sensitive   = true
 }
 
 output "table_name" {

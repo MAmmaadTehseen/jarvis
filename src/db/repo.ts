@@ -10,10 +10,9 @@
  *   WEEK#<n>      REVIEW                      Review
  *   STREAKS       STREAK#<goalId>             Streak
  *   PARKED        PARK#<createdAt>            Parked
- *   STATE         REVIEW#<chatId>             PendingReview
  */
 import { randomUUID } from "node:crypto";
-import { DeleteCommand, GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { config } from "../config.js";
 import type { GoalSeed } from "../domain/rotation.js";
 import { doc } from "./client.js";
@@ -70,12 +69,6 @@ export interface Parked {
   text: string;
   createdAt: string;
 }
-/** A review in progress. Persisted because Lambda keeps no memory between invocations. */
-export interface PendingReview {
-  chatId: number;
-  week: number;
-  answers: string[];
-}
 export interface WeekData {
   tasks: Task[];
   logs: LogEntry[];
@@ -95,8 +88,6 @@ const K = {
   streak: (id: string) => `STREAK#${id}`,
   parked: "PARKED",
   park: (createdAt: string) => `PARK#${createdAt}`,
-  state: "STATE",
-  pendingReview: (chatId: number) => `REVIEW#${chatId}`,
 };
 
 type Item = Record<string, unknown>;
@@ -224,25 +215,4 @@ export async function addParked(text: string): Promise<Parked> {
 export async function listParked(): Promise<Parked[]> {
   const items = await query(K.parked, "PARK#");
   return items.map((i) => ({ text: i.text as string, createdAt: i.createdAt as string }));
-}
-
-// In-progress review
-
-export async function getPendingReview(chatId: number): Promise<PendingReview | undefined> {
-  const out = await doc.send(new GetCommand({ TableName, Key: { pk: K.state, sk: K.pendingReview(chatId) } }));
-  if (!out.Item) return undefined;
-  return { chatId, week: out.Item.week as number, answers: (out.Item.answers as string[]) ?? [] };
-}
-
-export async function putPendingReview(pending: PendingReview): Promise<void> {
-  await doc.send(
-    new PutCommand({
-      TableName,
-      Item: { pk: K.state, sk: K.pendingReview(pending.chatId), ...pending },
-    }),
-  );
-}
-
-export async function clearPendingReview(chatId: number): Promise<void> {
-  await doc.send(new DeleteCommand({ TableName, Key: { pk: K.state, sk: K.pendingReview(chatId) } }));
 }

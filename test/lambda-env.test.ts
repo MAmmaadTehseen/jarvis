@@ -1,14 +1,19 @@
 /**
  * Ties the Terraform environment block to the config schema.
  *
- * These drift apart silently: Terraform once set RUN_MODE=webhook without a
- * WEBHOOK_URL, which passes review, deploys fine, and then makes every cold
+ * These drift apart silently: Terraform once set RUN_MODE=webhook without the
+ * URL it required, which passes review, deploys fine, and then makes every cold
  * start exit(1). Nothing else in the suite would have caught it.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-process.env.BOT_TOKEN ??= "test-token";
+// Assigned, not defaulted: dotenv will not override these, so a stale .env on
+// the developer's machine cannot decide whether this suite passes.
+process.env.DISCORD_APP_ID = "1";
+process.env.DISCORD_PUBLIC_KEY = "ab".repeat(32);
+process.env.DISCORD_BOT_TOKEN = "t";
+process.env.LOCAL_CRON = "false";
 
 const { configSchema } = await import("../src/config.js");
 
@@ -23,9 +28,11 @@ function terraformEnvNames(): string[] {
 /** A plausible value per variable, so we test the shape rather than the values. */
 const SAMPLES: Record<string, string> = {
   NODE_ENV: "production",
-  BOT_TOKEN: "8123456789:AAtest",
-  OWNER_CHAT_ID: "123456789",
-  WEBHOOK_SECRET: "a".repeat(48),
+  DISCORD_APP_ID: "1234567890123456789",
+  DISCORD_PUBLIC_KEY: "ab".repeat(32),
+  DISCORD_BOT_TOKEN: "a-bot-token",
+  DISCORD_CHANNEL_ID: "1234567890123456789",
+  OWNER_USER_ID: "1234567890123456789",
   TABLE_NAME: "jarvis",
   TZ_NAME: "Asia/Karachi",
   START_DATE: "2026-09-14",
@@ -38,7 +45,7 @@ describe("the Lambda environment", () => {
   it("was actually parsed out of main.tf", () => {
     // Without this, a broken regex yields an empty list and every other
     // assertion in this file passes for the wrong reason.
-    expect(names).toContain("BOT_TOKEN");
+    expect(names).toContain("DISCORD_BOT_TOKEN");
     expect(names).toContain("TABLE_NAME");
     expect(names.length).toBeGreaterThanOrEqual(6);
   });
@@ -62,10 +69,12 @@ describe("the Lambda environment", () => {
     expect(names).not.toContain("DYNAMODB_ENDPOINT");
   });
 
-  it("rejects RUN_MODE=webhook without a URL, which is why it is not in the block", () => {
-    expect(names).not.toContain("RUN_MODE");
+  it("leaves LOCAL_CRON off, because EventBridge invokes the function directly", () => {
+    expect(names).not.toContain("LOCAL_CRON");
+  });
 
-    const bad = configSchema.safeParse({ BOT_TOKEN: "x", RUN_MODE: "webhook" });
+  it("still rejects an environment that is missing the Discord credentials", () => {
+    const bad = configSchema.safeParse({ TABLE_NAME: "jarvis" });
     expect(bad.success).toBe(false);
   });
 });

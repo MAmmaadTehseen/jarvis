@@ -15,10 +15,6 @@ export function fmtMinutes(m: number): string {
   return `${m}m`;
 }
 
-export function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 export function todayMessage(opts: {
   day: DayInfo;
   week: number;
@@ -36,13 +32,13 @@ export function todayMessage(opts: {
     lines.push("", slot.hint);
     return lines.join("\n");
   }
-  lines.push(task ? `Task: ${task.title}` : `Task: none yet. ${slot.hint} (/add to set one)`);
+  lines.push(task ? `Task: ${task.title}` : `Task: none yet. ${slot.hint} (/add sets one)`);
   lines.push(`Logged today: ${fmtMinutes(loggedToday)}${learnedToday ? " · learned ✓" : ""}`);
-  lines.push("", "When you're done: /log 60 what you did, then /learned one line. /done marks the task. /skip reason if not today.");
+  lines.push("", "When you are done: /log, then /learned. /done marks the task, /skip records why not.");
   return lines.join("\n");
 }
 
-/** Preformatted; send inside <pre> with parse_mode HTML. */
+/** Column-aligned, so callers wrap it in a code block. */
 export function scoreMessage(score: WeekScore): string {
   const nameW = Math.max(...score.goals.map((g) => g.name.length), 4);
   const rows = score.goals.map((g) => {
@@ -57,30 +53,30 @@ export function scoreMessage(score: WeekScore): string {
 }
 
 export function weekMessage(week: number, tasks: Task[], goals: Map<string, Goal>): string {
-  if (tasks.length === 0) return `Week ${week}: no tasks yet. Add one with /add <goal> <task>\nGoals: ${[...goals.keys()].join(", ")}`;
+  if (tasks.length === 0) return `Week ${week}: no tasks yet. Add one with /add.`;
   const mark = (t: Task) => (t.status === "done" ? "✅" : t.status === "skipped" ? "⏭" : "▢");
   const lines = tasks.map((t, i) => {
     const g = goals.get(t.goalId)?.name ?? t.goalId;
     const extra = t.status === "skipped" && t.skipReason ? ` (${t.skipReason})` : "";
     return `${i + 1}. ${mark(t)} [${g}] ${t.title}${extra}`;
   });
-  return `Week ${week} tasks\n\n${lines.join("\n")}\n\n/done n · /skip n reason`;
+  return `**Week ${week} tasks**\n${lines.join("\n")}\n\nUse the number with /done or /skip.`;
 }
 
 export function goalsMessage(goals: Goal[]): string {
   const lines = goals.filter((g) => g.active).sort((a, b) => a.order - b.order).map((g) => `• ${g.goalId}: ${g.name}, ${fmtMinutes(g.weeklyMinutesTarget)}/week`);
-  return `Goals\n\n${lines.join("\n")}`;
+  return `**Goals**\n${lines.join("\n")}`;
 }
 
 export function dailyPostDraft(opts: { dayN: number; date: string; logs: LogEntry[]; learned: Learned | undefined }): string {
   const { dayN, date, logs, learned } = opts;
-  const did = logs.length ? logs.map((l) => l.note).filter(Boolean).join("; ") : "(nothing logged yet, /log 60 what you did)";
+  const did = logs.length ? logs.map((l) => l.note).filter(Boolean).join("; ") : "(nothing logged yet — use /log)";
   const head = dayN > 0 ? `Day ${dayN} of building Jarvis in public.` : `Building Jarvis in public, ${date}.`;
   return [
     head,
     "",
     `Did: ${did}`,
-    `Learned: ${learned?.text ?? "(add with /learned one line)"}`,
+    `Learned: ${learned?.text ?? "(add one with /learned)"}`,
     "Broke: (fill in, or delete this line)",
     "",
     "#buildinpublic #aws #devops #typescript",
@@ -105,29 +101,21 @@ export function weeklyPostDraft(score: WeekScore, review: Review | undefined): s
   ].join("\n");
 }
 
-export const REVIEW_QUESTIONS = [
-  "1/3 What shipped this week? (one or two lines)",
-  "2/3 What slipped, and why?",
-  "3/3 One lesson you'd tell last-Monday you.",
-] as const;
-
 export const HELP = [
-  "Jarvis keeps you on one task a day.",
+  "**Jarvis** keeps you on one task a day.",
   "",
-  "Rotation: Mon Jarvis · Tue AWS · Wed Jarvis · Thu DevOps · Fri Freelance · Sat Content · Sun Review",
+  "Rotation: Mon Jarvis / Tue AWS / Wed Jarvis / Thu DevOps / Fri Freelance / Sat Content / Sun Review",
   "",
-  "/today  what's today's slot and task",
-  "/log 60 <note>  record minutes (add a goal id to log against another goal: /log 30 aws ...)",
-  "/learned <line>  one thing you learned today (drives the daily post)",
-  "/done [n]  mark a task done (default: today's first open task)",
-  "/skip [n] <reason>  skip a task with a reason",
-  "/week  this week's tasks",
-  "/add [goal] <task>  add a task (default goal: today's slot)",
-  "/score  this week's scorecard",
-  "/review  Sunday review, 3 questions",
-  "/post  today's LinkedIn draft · /post week  the weekly one",
-  "/park <idea>  park an idea for Sunday · /parked  list them",
-  "/goals  goals and targets",
+  "`/today` what today's slot and task are",
+  "`/log minutes: note: [goal:]` record time",
+  "`/learned text:` the one line that becomes today's post",
+  "`/done [n:]` and `/skip reason: [n:]` task status",
+  "`/week` this week's tasks, `/add task: [goal:]` add one",
+  "`/score` minutes vs target, tasks, streaks",
+  "`/review` the Sunday form, three questions",
+  "`/post [scope:]` a LinkedIn draft from real data",
+  "`/park idea:` park it until Sunday, `/parked` list them",
+  "`/goals` goals and weekly targets",
   "",
-  "Nudges: 09:00 today's task · 21:00 did you do it? · Sun 19:00 review.",
+  "Nudges: 09:00 today's task, 21:00 did you do it, Sunday 19:00 the scorecard.",
 ].join("\n");
