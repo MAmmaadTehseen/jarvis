@@ -1,5 +1,7 @@
 # Jarvis
 
+[![ci](https://github.com/MAmmaadTehseen/jarvis/actions/workflows/ci.yml/badge.svg)](https://github.com/MAmmaadTehseen/jarvis/actions/workflows/ci.yml)
+
 A self-hosted accountability bot that runs my learning journey in public.
 
 I have five things I want to do at once: learn AWS properly, learn DevOps properly, freelance, build practice projects, build real ones. I have 5 to 8 hours a week and I derail easily, because nothing forces a choice each day and nothing notices when I skip.
