@@ -23,15 +23,13 @@ export const COMMANDS = [
   { command: "help", description: "How this works" },
 ];
 
-interface PendingReview {
-  week: number;
-  answers: string[];
-}
-const pendingReview = new Map<number, PendingReview>();
-
-/** Kick off the 3-question review for a chat. Used by /review and the Sunday job. */
+/**
+ * Kick off the 3-question review for a chat. Used by /review and the Sunday job.
+ * The answers in progress live in DynamoDB rather than in memory: on Lambda each
+ * reply can land in a different container, and an in-memory Map would lose them.
+ */
 export async function startReview(bot: Bot, chatId: number, week: number): Promise<void> {
-  pendingReview.set(chatId, { week, answers: [] });
+  await repo.putPendingReview({ chatId, week, answers: [] });
   await bot.api.sendMessage(chatId, `Week ${week} review. Three questions, reply to each in one message.\n\n${fmt.REVIEW_QUESTIONS[0]}`);
 }
 
@@ -197,13 +195,16 @@ export function createBot(): Bot {
 
   // Plain text: only meaningful while a review is in progress.
   bot.on("message:text", async (ctx) => {
-    const pending = pendingReview.get(ctx.chat.id);
+    const pending = await repo.getPendingReview(ctx.chat.id);
     if (!pending) return ctx.reply("Not sure what to do with that. /help lists the commands.");
     pending.answers.push(ctx.message.text.trim());
     const next = fmt.REVIEW_QUESTIONS[pending.answers.length];
-    if (next) return ctx.reply(next);
+    if (next) {
+      await repo.putPendingReview(pending);
+      return ctx.reply(next);
+    }
 
-    pendingReview.delete(ctx.chat.id);
+    await repo.clearPendingReview(ctx.chat.id);
     const [shipped = "", slipped = "", lesson = ""] = pending.answers;
     const review: repo.Review = { week: pending.week, shipped, slipped, lesson, createdAt: new Date().toISOString() };
     await repo.putReview(review);

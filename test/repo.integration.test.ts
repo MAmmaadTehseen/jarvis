@@ -73,6 +73,20 @@ describe.skipIf(!up)("repo against DynamoDB Local", () => {
     expect(again.find((s) => s.goalId === "aws")?.count).toBe(1);
   });
 
+  it("round-trips an in-progress review, which Lambda cannot keep in memory", async () => {
+    const chatId = 4242;
+    expect(await repo.getPendingReview(chatId)).toBeUndefined();
+
+    await repo.putPendingReview({ chatId, week: 99, answers: [] });
+    await repo.putPendingReview({ chatId, week: 99, answers: ["shipped a thing"] });
+
+    const pending = await repo.getPendingReview(chatId);
+    expect(pending).toEqual({ chatId, week: 99, answers: ["shipped a thing"] });
+
+    await repo.clearPendingReview(chatId);
+    expect(await repo.getPendingReview(chatId)).toBeUndefined();
+  });
+
   it("parks ideas", async () => {
     await repo.addParked("voice mode");
     const parked = await repo.listParked();
