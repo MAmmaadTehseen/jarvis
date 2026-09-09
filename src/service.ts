@@ -4,7 +4,7 @@
 import { config } from "./config.js";
 import * as repo from "./db/repo.js";
 import { nextStreak, scoreWeek, type WeekScore, minutesByGoal } from "./domain/score.js";
-import { dayInfo, dayNumber, weekNumber, type DayInfo } from "./domain/time.js";
+import { addDays, dayInfo, dayNumber, weekNumber, weekStart, type DayInfo } from "./domain/time.js";
 
 export interface Now {
   day: DayInfo;
@@ -51,4 +51,16 @@ export async function loggedDates(weeks: number[]): Promise<Set<string>> {
     for (const l of data.logs) set.add(l.date);
   }
   return set;
+}
+
+/** "14 Sep - 20 Sep 2026", for the scorecard header. */
+export function weekRange(week: number): string {
+  const start = weekStart(config.START_DATE, week);
+  const end = addDays(start, 6);
+  const fmt = (d: string, withYear: boolean) => {
+    const [y, m, day] = d.split("-");
+    const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(m) - 1];
+    return `${Number(day)} ${month}${withYear ? ` ${y}` : ""}`;
+  };
+  return `${fmt(start, false)} - ${fmt(end, true)}`;
 }

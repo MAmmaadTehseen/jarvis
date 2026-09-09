@@ -6,7 +6,7 @@
  */
 import { config } from "./config.js";
 import * as repo from "./db/repo.js";
-import { sendMessage } from "./discord/api.js";
+import { sendMessage, sendMessageWithFile } from "./discord/api.js";
 import * as fmt from "./domain/format.js";
 import { slotFor } from "./domain/rotation.js";
 import { consecutiveMissedDays } from "./domain/score.js";
@@ -77,7 +77,28 @@ export async function sunday(): Promise<void> {
   const { week } = svc.now();
   await svc.recomputeStreaks(week);
   const score = await svc.getScore(week);
-  await post(`Week ${week} is done.\n\`\`\`\n${fmt.scoreMessage(score)}\n\`\`\`\nRun \`/review\` — three questions, one form.`);
+  const caption = `Week ${week} is done. Run \`/review\` — three questions, one form.`;
+
+  const { renderScorecard } = await import("./scorecard.js");
+  const png = await renderScorecard(score, { dateRange: svc.weekRange(week) });
+
+  if (!png) {
+    // The renderer reports its own reason. A missing image must never cost the
+    // weekly post, so fall back to the text card.
+    await post(`${caption}\n\`\`\`\n${fmt.scoreMessage(score)}\n\`\`\``);
+    return;
+  }
+
+  if (!config.DISCORD_CHANNEL_ID) {
+    log.warn("DISCORD_CHANNEL_ID not set; dropping scorecard");
+    return;
+  }
+  const mention = config.OWNER_USER_ID ? `<@${config.OWNER_USER_ID}> ` : "";
+  await sendMessageWithFile(config.DISCORD_CHANNEL_ID, mention + caption, {
+    name: `jarvis-week-${week}.png`,
+    data: png,
+    contentType: "image/png",
+  });
 }
 
 export async function runJob(name: JobName): Promise<void> {

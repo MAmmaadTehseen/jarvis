@@ -98,6 +98,10 @@ resource "aws_lambda_function" "jarvis" {
   timeout     = 30  # generous for the scheduled jobs; interactions answer in well under 3s
   memory_size = 512 # Discord drops any interaction not answered within 3s; more memory means more CPU on a cold start
 
+  # Skia and the fonts for the weekly scorecard. Imported lazily by the code, so
+  # nothing on the interaction path pays for it.
+  layers = [aws_lambda_layer_version.canvas.arn]
+
   environment {
     variables = {
       NODE_ENV           = "production"

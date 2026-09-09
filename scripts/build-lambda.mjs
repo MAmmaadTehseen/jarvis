@@ -19,6 +19,9 @@ await build({
   format: "cjs",
   minify: true,
   sourcemap: false,
+  // Provided by the Lambda layer at runtime. Bundling it would pull a 29 MB
+  // native binary into every deploy.
+  external: ["@napi-rs/canvas"],
 });
 
 mkdirSync(outdir, { recursive: true });
