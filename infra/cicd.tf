@@ -2,16 +2,48 @@
 # AWS credentials. No access keys are stored in the repository, and nothing here
 # outlives the ~1 hour session it is issued for.
 
-variable "github_repo" {
-  description = "owner/name of the only repository allowed to deploy."
+variable "github_owner" {
+  description = "GitHub account that owns the repository."
   type        = string
-  default     = "MAmmaadTehseen/jarvis"
+  default     = "MAmmaadTehseen"
+}
+
+variable "github_owner_id" {
+  description = "Numeric account id: gh api user --jq .id"
+  type        = string
+  default     = "97141225"
+}
+
+variable "github_repo_name" {
+  description = "Repository name, without the owner."
+  type        = string
+  default     = "jarvis"
+}
+
+variable "github_repo_id" {
+  description = "Numeric repository id: gh api repos/OWNER/REPO --jq .id"
+  type        = string
+  default     = "1360305333"
 }
 
 variable "github_branch" {
   description = "The only branch whose workflow runs may deploy."
   type        = string
   default     = "main"
+}
+
+locals {
+  # GitHub now issues immutable subject claims, embedding the numeric account
+  # and repository ids: repo:owner@123/name@456:ref:refs/heads/main. The point is
+  # that renaming an account or repo no longer silently hands its trust to
+  # whoever claims the freed-up name.
+  #
+  # Both forms are accepted because the rollout is per-account and can flip
+  # underneath us. Neither contains a wildcard, so each one still pins to
+  # exactly this repository and branch - a StringLike with `@*` would have been
+  # the lazy fix and would have widened what the role trusts.
+  github_subject_immutable = "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo_name}@${var.github_repo_id}:ref:refs/heads/${var.github_branch}"
+  github_subject_legacy    = "repo:${var.github_owner}/${var.github_repo_name}:ref:refs/heads/${var.github_branch}"
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
@@ -42,10 +74,12 @@ data "aws_iam_policy_document" "github_assume" {
     # GitHub OIDC issuer as a whole, meaning any workflow in any repository on
     # GitHub could assume it. Pinned to one repo and one branch, so a pull
     # request from a fork cannot deploy.
+    #
+    # A list here is OR: either exact subject is accepted, neither is a pattern.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:ref:refs/heads/${var.github_branch}"]
+      values   = [local.github_subject_immutable, local.github_subject_legacy]
     }
   }
 }
