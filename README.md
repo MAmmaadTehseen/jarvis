@@ -39,8 +39,8 @@ npm run typecheck
 Discord delivers interactions over HTTPS, so driving the local server from
 Discord needs a tunnel (`cloudflared tunnel --url http://localhost:3000`) with
 that URL set as the app's Interactions Endpoint. Without one, `POST /cron/morning`
-still fires a nudge, and the tests cover the rest. Day to day it is easier to
-just deploy: the whole cycle is `npm run deploy`.
+still fires a nudge, and the tests cover the rest. Day to day it is easier to let
+CI do it: push to `main` and the deploy happens once the tests pass.
 
 ## Commands
 
@@ -81,7 +81,7 @@ There is no server, no load balancer and no NAT gateway, which is where a bill l
 this usually comes from. Discord posts interactions straight to a Lambda function
 URL, and EventBridge Scheduler invokes the same function for the three daily jobs.
 
-```
+```text
 Discord ──signed POST──▶ Lambda function URL ──┐
                                                ├──▶ jarvis (Node 22, arm64) ──▶ DynamoDB
 EventBridge Scheduler ──{"job":"morning"}──────┘
@@ -108,6 +108,29 @@ few deliberately invalid signatures, and only saves the URL if all of them are
 answered correctly.
 
 `terraform -chdir=infra destroy` removes every resource.
+
+### Who deploys what
+
+Pushing to `main` deploys, once the tests pass. GitHub Actions trades its own
+signed job token for temporary AWS credentials through an OIDC identity
+provider, so there are no access keys in the repository and nothing outlives the
+session it was issued for. The trust policy is pinned to this repo and this
+branch, which is the line that stops any other repository on GitHub from
+assuming the role.
+
+The split is deliberate:
+
+| Owner | Owns | How |
+| --- | --- | --- |
+| Terraform, from a laptop | the shape of the infrastructure | `terraform apply` |
+| GitHub Actions | the code running inside it | push to `main` |
+
+That is why the function carries `ignore_changes = [filename, source_code_hash]`.
+Without it, a later `terraform apply` would quietly roll production back to
+whatever bundle happened to be in that working tree.
+
+`npm run deploy` ships the local bundle straight to Lambda. It is the escape
+hatch for when CI is unavailable, not the normal path.
 
 ### Security notes
 

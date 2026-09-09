@@ -121,6 +121,17 @@ resource "aws_lambda_function" "jarvis" {
     aws_iam_role_policy_attachment.lambda_logs,
     aws_cloudwatch_log_group.lambda,
   ]
+
+  lifecycle {
+    # Terraform creates the function with whatever bundle is on disk, then stops
+    # tracking its contents: from there on, GitHub Actions owns the code.
+    # Without this, a later `terraform apply` from a laptop would quietly roll
+    # production back to whatever happened to be in that working tree.
+    #
+    # The split is the point. Terraform owns the shape of the infrastructure,
+    # CI owns what runs inside it.
+    ignore_changes = [filename, source_code_hash]
+  }
 }
 
 resource "aws_lambda_function_url" "jarvis" {

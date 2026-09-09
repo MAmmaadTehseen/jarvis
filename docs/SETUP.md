@@ -301,7 +301,8 @@ questions and then drafts the post for you.
 
 | Task | Command |
 | --- | --- |
-| Ship a code change | `npm run deploy` |
+| Ship a code change | `git push` — CI tests it, then deploys |
+| Ship without CI (emergency) | `npm run deploy` |
 | Change a slash command | edit `src/discord/commands.ts`, then `npm run register` |
 | Watch the logs | `aws logs tail /aws/lambda/jarvis --follow` |
 | Fire a nudge early | `aws lambda invoke --function-name jarvis --payload '{"job":"morning"}' --cli-binary-format raw-in-base64-out /dev/stdout` |

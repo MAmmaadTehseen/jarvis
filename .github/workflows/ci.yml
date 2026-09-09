@@ -5,12 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege by default; the deploy job widens this for itself.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
 
-    # Without this the DynamoDB integration test skips itself and the single-table
-    # layout goes untested.
+    # Without this the DynamoDB integration test skips itself and the
+    # single-table layout goes untested.
     services:
       dynamodb:
         image: amazon/dynamodb-local:latest
@@ -32,3 +36,68 @@ jobs:
       - run: npm run build
       - name: Docker build
         run: docker build -t jarvis:ci .
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # required to request the OIDC token
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Same script the manual `npm run deploy` uses, so the archive CI ships is
+      # built exactly the way a local emergency deploy would build it.
+      - name: Build and zip the bundle
+        run: |
+          npm run build:lambda
+          npm run zip:lambda
+
+      # Exchanges this run's signed job token for temporary AWS credentials.
+      # Nothing long-lived is stored in the repository.
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Ship it
+        run: |
+          aws lambda update-function-code \
+            --function-name jarvis \
+            --zip-file fileb://dist/lambda.zip \
+            --publish \
+            --no-cli-pager
+          aws lambda wait function-updated-v2 --function-name jarvis
+
+      # Proves the new bundle actually loads, its config validates and it can
+      # reach DynamoDB. An unknown job name is handled and returns ok:false
+      # without messaging anyone, so this is safe to run on every deploy.
+      - name: Smoke test
+        run: |
+          aws lambda invoke \
+            --function-name jarvis \
+            --payload '{"job":"__smoke__"}' \
+            --cli-binary-format raw-in-base64-out \
+            --no-cli-pager \
+            response.json > invoke.json
+          echo "--- invoke ---" && cat invoke.json
+          echo "--- response ---" && cat response.json && echo
+
+          if grep -q '"FunctionError"' invoke.json; then
+            echo "::error::the function errored on invoke - the deploy is bad"
+            exit 1
+          fi
+          if ! grep -q '"error":"unknown job __smoke__"' response.json; then
+            echo "::error::unexpected response - the handler did not run as expected"
+            exit 1
+          fi
+          echo "smoke test passed"
