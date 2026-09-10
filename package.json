@@ -33,7 +33,6 @@
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.9",
-    "@napi-rs/canvas-linux-arm64-gnu": "^1.0.9",
     "@types/aws-lambda": "^8.10.163",
     "@types/node": "^22.10.0",
     "esbuild": "^0.25.0",
