@@ -42,6 +42,22 @@ Two, and they point the same way.
 
 And: check that the thing you're building on is reachable before you build on it. One `curl` at the start would have saved the whole Telegram detour. I now run the connectivity check first, on every project.
 
+## Ahead of schedule
+
+Two of Week 1's items landed in Week 0.
+
+**Deploys moved to CI.** Pushing to `main` now ships the function once the tests pass, using OIDC rather than access keys - GitHub trades its own signed job token for temporary AWS credentials. The first attempt failed with a flat `AccessDenied`, and everything I could inspect looked right: provider, audience, repo casing. CloudTrail settled it by recording the subject STS was actually handed:
+
+    repo:MAmmaadTehseen@97141225/jarvis@1360305333:ref:refs/heads/main
+
+GitHub now issues immutable subjects with the numeric account and repo ids embedded, so renaming an account can't hand its trust to whoever grabs the freed-up name. My policy expected the classic `repo:owner/name` form. The lesson isn't about OIDC: it's that `AccessDenied` is diagnosable rather than guessable, and I'd been guessing.
+
+**The scorecard is an image.** Skia is ~29 MB, so it lives in a Lambda layer and is imported lazily. The measured result: the weekly job takes 2.3s and 146 MB, while `/today` is still 311 ms with a 338 ms cold start. The layer costs the interaction path nothing.
+
+Building it also broke `npm ci` for a day. I'd declared the linux/arm64 Skia binary as a devDependency, which npm cannot resolve on Windows; installing it with `--force` left a versionless stub in the lockfile that CI then rejected. The fix was to stop pretending it was a dependency at all - the layer build downloads it with `npm pack`, which has no platform check to fight.
+
+Three failures this week, and all three were found by reading what a machine recorded rather than what I assumed: a `curl` timeout, a CloudTrail entry, an `npm ci` error. That's the actual skill.
+
 ## Next
 
-Week 1: scorecard as an image, GitHub Actions deploying on push via OIDC, the five AWS onboarding tasks for the $200 in credits, Upwork profile live. Daily posts start week 2.
+Week 1: the five AWS onboarding tasks for the $200 in credits, `/review` writing the journal automatically, Upwork profile live. Daily posts start week 2.
